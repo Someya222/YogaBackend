@@ -12,6 +12,13 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 router.post('/generate', async (req, res) => {
   const { goal } = req.body;
 
+  if (!OPENROUTER_API_KEY) {
+    console.error('ERROR: OPENROUTER_API_KEY is missing from environment variables.');
+    return res.status(500).json({
+      message: 'AI configuration error: API key missing on server.',
+    });
+  }
+
   try {
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
@@ -37,8 +44,10 @@ No extra explanation or formatting.`
       },
       {
         headers: {
-          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json"
+          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://yoga-frontend-five.vercel.app", // Optional, for OpenRouter analytics
+          "X-Title": "Yoga App", // Optional, for OpenRouter analytics
         }
       }
     );
@@ -48,10 +57,17 @@ No extra explanation or formatting.`
     let poses = [];
 
     try {
-      poses = JSON.parse(result);
-    } catch {
+      // Handle cases where AI might still wrap in markdown or return as string
+      let cleanedResult = result;
+      if (typeof result === 'string') {
+        cleanedResult = result.replace(/```json/g, '').replace(/```/g, '').trim();
+      }
+      poses = JSON.parse(cleanedResult);
+    } catch (err) {
+      console.error('Failed to parse AI response:', result);
       return res.status(500).json({
-        message: "Invalid AI response format"
+        message: "Invalid AI response format",
+        raw: result
       });
     }
 
@@ -60,7 +76,7 @@ No extra explanation or formatting.`
   } catch (error) {
     console.error('OpenRouter error:', error?.response?.data || error.message);
 
-    res.status(500).json({
+    res.status(error?.response?.status || 500).json({
       message: 'AI request failed',
       error: error?.response?.data || error.message,
     });

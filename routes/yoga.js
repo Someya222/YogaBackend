@@ -5,7 +5,8 @@ const auth = require('../middleware/auth');
 const YogaTracker = require('../models/YogaTracker');
 const router = express.Router();
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
 // ✨ AI-Powered Yoga Suggestion Route
 router.post('/generate', async (req, res) => {
@@ -13,35 +14,52 @@ router.post('/generate', async (req, res) => {
 
   try {
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
+      "https://openrouter.ai/api/v1/chat/completions",
       {
-        contents: [
+        model: "mistralai/mistral-7b-instruct:free",
+        messages: [
           {
-            parts: [
-              {
-               text: `Suggest 3 yoga poses for the goal: "${goal}".
-Respond only in raw JSON array format, do NOT wrap it in markdown code block. Each object should contain:
+            role: "user",
+            content: `Suggest 3 yoga poses for the goal: "${goal}".
 
+Respond only in raw JSON array format.
+Do NOT wrap it in markdown code block.
+
+Each object should contain:
 - title
-- image (a public image URL of the pose)
+- image
 - instructions
 - benefits
 
 No extra explanation or formatting.`
-              }
-            ]
           }
         ]
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json"
+        }
       }
     );
 
-// Add this route before app.listen
-    const result = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const result = response.data.choices?.[0]?.message?.content;
 
-    res.json({ poses: result });
+    let poses = [];
+
+    try {
+      poses = JSON.parse(result);
+    } catch {
+      return res.status(500).json({
+        message: "Invalid AI response format"
+      });
+    }
+
+    res.json({ poses });
 
   } catch (error) {
-    console.error('Gemini error:', error?.response?.data || error.message);
+    console.error('OpenRouter error:', error?.response?.data || error.message);
+
     res.status(500).json({
       message: 'AI request failed',
       error: error?.response?.data || error.message,
